@@ -9,34 +9,66 @@
 */
 package com.whizzosoftware.wzwave.controller.netty;
 
-import com.whizzosoftware.wzwave.channel.*;
-import com.whizzosoftware.wzwave.channel.event.*;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.whizzosoftware.wzwave.channel.ACKInboundHandler;
-import com.whizzosoftware.wzwave.channel.ZWaveChannelInboundHandler;
-import com.whizzosoftware.wzwave.channel.TransactionInboundHandler;
 import com.whizzosoftware.wzwave.channel.FrameQueueHandler;
+import com.whizzosoftware.wzwave.channel.TransactionInboundHandler;
+import com.whizzosoftware.wzwave.channel.ZWaveChannelInboundHandler;
+import com.whizzosoftware.wzwave.channel.ZWaveChannelListener;
+import com.whizzosoftware.wzwave.channel.event.SendDataTransactionCompletedEvent;
+import com.whizzosoftware.wzwave.channel.event.SendDataTransactionFailedEvent;
+import com.whizzosoftware.wzwave.channel.event.TransactionCompletedEvent;
+import com.whizzosoftware.wzwave.channel.event.TransactionFailedEvent;
+import com.whizzosoftware.wzwave.channel.event.TransactionStartedEvent;
 import com.whizzosoftware.wzwave.codec.ZWaveFrameDecoder;
 import com.whizzosoftware.wzwave.codec.ZWaveFrameEncoder;
+import com.whizzosoftware.wzwave.commandclass.MultilevelSensorCommandClass;
+import com.whizzosoftware.wzwave.commandclass.MultilevelSwitchCommandClass;
 import com.whizzosoftware.wzwave.commandclass.WakeUpCommandClass;
 import com.whizzosoftware.wzwave.controller.ZWaveController;
 import com.whizzosoftware.wzwave.controller.ZWaveControllerContext;
 import com.whizzosoftware.wzwave.controller.ZWaveControllerListener;
-import com.whizzosoftware.wzwave.frame.*;
-import com.whizzosoftware.wzwave.node.*;
+import com.whizzosoftware.wzwave.frame.AddNodeToNetwork;
+import com.whizzosoftware.wzwave.frame.ApplicationCommand;
+import com.whizzosoftware.wzwave.frame.ApplicationUpdate;
+import com.whizzosoftware.wzwave.frame.DataFrame;
+import com.whizzosoftware.wzwave.frame.InitData;
+import com.whizzosoftware.wzwave.frame.MemoryGetId;
+import com.whizzosoftware.wzwave.frame.NodeProtocolInfo;
+import com.whizzosoftware.wzwave.frame.OutboundDataFrame;
+import com.whizzosoftware.wzwave.frame.RemoveNodeFromNetwork;
+import com.whizzosoftware.wzwave.frame.Version;
+import com.whizzosoftware.wzwave.node.NodeCreationException;
+import com.whizzosoftware.wzwave.node.NodeInfo;
+import com.whizzosoftware.wzwave.node.NodeListener;
+import com.whizzosoftware.wzwave.node.ZWaveEndpoint;
+import com.whizzosoftware.wzwave.node.ZWaveNode;
+import com.whizzosoftware.wzwave.node.ZWaveNodeFactory;
+import com.whizzosoftware.wzwave.node.generic.MultilevelSensor;
+import com.whizzosoftware.wzwave.node.specific.MultilevelPowerSwitch;
 import com.whizzosoftware.wzwave.persist.PersistentStore;
 import com.whizzosoftware.wzwave.persist.mapdb.MapDbPersistentStore;
 import com.whizzosoftware.wzwave.util.ByteUtil;
+
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.*;
-import io.netty.channel.oio.OioEventLoopGroup;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.jsc.JSerialCommChannel;
 import io.netty.channel.jsc.JSerialCommChannelConfig;
 import io.netty.channel.jsc.JSerialCommDeviceAddress;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.util.*;
+import io.netty.channel.oio.OioEventLoopGroup;
 
 /**
  * A Netty implementation of a ZWaveController.
@@ -524,4 +556,33 @@ public class NettyZWaveController implements ZWaveController, ZWaveControllerCon
         // when a node moves to the "started" state, alert listeners that it's ready to be added
         onZWaveNodeAdded(node);
     }
+    
+    public static void main(String[] args) throws InterruptedException
+	{
+    	NettyZWaveController controller = new NettyZWaveController("COM3", new File("C:\\programmation\\zwave"));
+    	controller.start();
+    	Thread.sleep(5000);
+    	Collection<ZWaveNode> nodeList = controller.getNodes();
+    	while (nodeList.isEmpty())
+    	{
+    		System.out.println("Sleep 1s");
+        	Thread.sleep(1000);
+        	nodeList = controller.getNodes();
+    	}
+    	for (ZWaveNode node : nodeList) {
+    		if (node instanceof MultilevelPowerSwitch)
+    		{
+    			MultilevelPowerSwitch multilevelPowerSwitch = (MultilevelPowerSwitch) node;
+    			MultilevelSensorCommandClass sensorCommand = (MultilevelSensorCommandClass) multilevelPowerSwitch.getCommandClass(MultilevelSensorCommandClass.ID);
+    			System.out.println(sensorCommand.getType() + "=" + sensorCommand.getValues() + " " + sensorCommand.getScale());
+    			MultilevelSwitchCommandClass multilevelSwitchCommand = (MultilevelSwitchCommandClass) node.getCommandClass(MultilevelSwitchCommandClass.ID);
+    			System.out.println("level=" + multilevelSwitchCommand.getLevel());
+    		}
+    		else if (node instanceof MultilevelSensor) {
+
+        		System.out.println(node);
+    		}
+    	}
+    	controller.stop();
+	}
 }
